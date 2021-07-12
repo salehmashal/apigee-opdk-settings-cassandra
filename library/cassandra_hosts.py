@@ -23,9 +23,9 @@ PRIVATE_ADDRESS = 'private_address'
 NOT_DEFINED = 'NOT DEFINED'
 LEAD_GROUP = 'lead_group'
 
-
-def build_cass_hosts_config(inventory_hostname, hostvars):
-    cassandra_groups = extract_cassandra_groups(hostvars[inventory_hostname], hostvars)
+def build_cass_hosts_config(inventory_hostname, hostvars, groups):
+    
+    cassandra_groups = extract_cassandra_groups(hostvars[inventory_hostname], hostvars, groups)
     configured_cassandra_racks = configure_cassandra_racks(cassandra_groups)
     cassandra_lead_found = determine_lead_group(configured_cassandra_racks,
                                                 inventory_hostname,
@@ -34,18 +34,20 @@ def build_cass_hosts_config(inventory_hostname, hostvars):
     return ' '.join(prioritized_groups)
 
 
-def extract_cassandra_groups(inventory_vars, hostvars):
+def extract_cassandra_groups(inventory_vars, hostvars, groups):
     cassandra_groups = {}
-    for name in inventory_vars[GROUPS]:
+    for name in groups:
         if 'dc_' in name and '_ds' in name:
-            cassandra_groups[name] = list(inventory_vars[GROUPS][name])
-
+            cassandra_groups[name] = list(groups[name])
+    
     cassandra_ip_mappings= { 'lead_group': '' }
     for cassandra_group_name in cassandra_groups:
         cassandra_ip_mappings[cassandra_group_name] = {}
         for ds_ip in cassandra_groups[cassandra_group_name]:
             if ds_ip in hostvars:
                 hostvar = hostvars[ds_ip]
+               # print("\n")
+                print("saleh logs:  ",hostvar['private_address'])
                 if PRIVATE_ADDRESS in hostvar:
                     private_ip = hostvar[PRIVATE_ADDRESS]
                 else:
@@ -116,12 +118,14 @@ def main():
     module = AnsibleModule(
             argument_spec=dict(
                     inventory_hostname=dict(required=True, type='str'),
-                    hostvars=dict(required=True, type="str")
+                    hostvars=dict(required=True, type="str"),
+                    groups=dict(required=True, type="str")
             )
     )
 
     inventory_hostname = module.params['inventory_hostname']
     hostvars = module.params['hostvars']
+    groups = module.params['groups']
     # try:
     #     hostvars = ast.literal_eval(hostvars)
     # except SyntaxError as e:
@@ -148,6 +152,7 @@ def main():
 
     try:
         hostvars = json.loads(hostvars)
+        groups = json.loads(groups)
     except SyntaxError as e:
         msg = "json.loads conversion failed: {0} {1}".format(e.lineno, e.msg)
         module.fail_json(
@@ -158,7 +163,7 @@ def main():
 
 
     try:
-        cass_hosts = build_cass_hosts_config(inventory_hostname, hostvars)
+        cass_hosts = build_cass_hosts_config(inventory_hostname, hostvars, groups)
     except SyntaxError as e:
         msg = "build_cass_hosts_config failed on line {0} with {1}".format(e.lineno, e.msg)
         module.fail_json(
